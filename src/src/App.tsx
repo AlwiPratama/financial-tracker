@@ -1,54 +1,245 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
-  History, 
-  Plus, 
-  Calendar,
-  ChevronDown,
-  FileText,
-  FolderOpen,
-  ArrowLeft,
-  PieChart,
-  Cloud,
-  Settings,
-  HelpCircle,
-  Moon,
-  Sun,
-  User,
-  Info,
-  Edit3,
-  BarChart3,
-  Activity,
-  X,
-  Home
-} from 'lucide-react';
-import type { Transaction, UserSettings, TransactionType, LanguageType } from './types';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { Home, FileText, Settings as SettingsIcon, HelpCircle, Cloud, Wallet, TrendingUp, TrendingDown, History, Plus, PieChart, Activity, ChevronDown, BarChart3, X, Calendar, DollarSign, FileTextIcon, User, Edit3, Sun, Moon, Info } from 'lucide-react';
+import { useAuth } from './contexts/AuthContext';
+import { useTransactions } from './hooks/useTransactions';
+import { LoginPage } from './components/LoginPage';
+import { Background } from './components/Background';
+import { AccountManager } from './components/AccountManager';
+import { ReportsTab } from './components/ReportsTab';
+import { InstallPrompt } from './components/InstallPrompt';
+import { Logo } from './components/Logo';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CATEGORY_COLORS, TRANSLATIONS } from './constants';
-import { formatRupiah, getMonthYearKey, getMonthName, getAvailableMonths } from './utils';
-import PieChartComponent from './components/PieChartComponent';
-import BarChartComponent from './components/BarChartComponent';
+import { formatRupiah, getMonthYearKey, getMonthName } from './utils/formatters';
+import { getAvailableMonths } from './utils/transactions';
+import { TransactionType, TooltipState } from './types';
+
+// Pie Chart Component
+const PieChartComponent = ({ chartData, totalChartAmount, setSelectedChartItem }) => {
+  let cumulativePercent = 0;
+  
+  if (chartData.length === 0) return <div className="h-64 flex items-center justify-center opacity-50 font-bold italic">Belum ada data grafik</div>;
+
+  return (
+    <div className="relative h-64 w-64 mx-auto my-6 group cursor-pointer">
+      <svg viewBox="-1 -1 2 2" className="transform -rotate-90 w-full h-full overflow-visible">
+        {chartData.map((slice, i) => {
+          const percent = slice.amount / totalChartAmount;
+          const startX = Math.cos(2 * Math.PI * cumulativePercent);
+          const startY = Math.sin(2 * Math.PI * cumulativePercent);
+          cumulativePercent += percent;
+          const endX = Math.cos(2 * Math.PI * cumulativePercent);
+          const endY = Math.sin(2 * Math.PI * cumulativePercent);
+          const largeArcFlag = percent > 0.5 ? 1 : 0;
+          
+          const pathData = chartData.length === 1 
+            ? "M 1 0 A 1 1 0 1 1 -1 0 A 1 1 0 1 1 1 0" 
+            : `M 0 0 L ${startX} ${startY} A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY} Z`;
+
+          return (
+            <path 
+              key={i} 
+              d={pathData} 
+              fill={slice.color} 
+              className="hover:opacity-80 transition-all duration-300 hover:scale-105 origin-center"
+              onClick={() => setSelectedChartItem(slice)}
+            />
+          );
+        })}
+      </svg>
+    </div>
+  );
+};
+
+// Bar Chart Component
+const BarChartComponent = ({ chartData, setSelectedChartItem, themeStyles }) => {
+  if (chartData.length === 0) return <div className="h-64 flex items-center justify-center opacity-50 font-bold italic">Belum ada data grafik</div>;
+  const maxVal = Math.max(...chartData.map(d => d.amount));
+  
+  return (
+    <div className="h-64 flex items-end justify-around gap-2 my-6 px-2">
+      {chartData.map((bar, i) => (
+        <div key={i} className="flex flex-col items-center w-full group cursor-pointer" onClick={() => setSelectedChartItem(bar)}>
+          <div 
+            className="w-full max-w-[40px] rounded-t-lg transition-all duration-500 hover:opacity-80 relative"
+            style={{ height: `${(bar.amount / maxVal) * 200}px`, backgroundColor: bar.color }}
+          >
+             <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/70 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                {formatRupiah(bar.amount)}
+             </div>
+          </div>
+          <span className={`text-[8px] mt-2 truncate w-full text-center ${themeStyles.textSecondary}`}>{bar.category.split(' ')[0]}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Custom Calendar Picker Component
+const CustomCalendarPicker = ({ selectedDate, onSelectDate, isDark, onClose }) => {
+  const calendarRef = useRef(null);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const d = new Date(selectedDate);
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (calendarRef.current && !calendarRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+  
+  const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+  const selectDate = (day) => {
+    const selected = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    const formatted = selected.toISOString().split('T')[0];
+    onSelectDate(formatted);
+    onClose();
+  };
+
+  const isSelectedDate = (day) => {
+    const checkDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    const selected = new Date(selectedDate);
+    return checkDate.toDateString() === selected.toDateString();
+  };
+
+  const isToday = (day) => {
+    const checkDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    const today = new Date();
+    return checkDate.toDateString() === today.toDateString();
+  };
+
+  // Generate years (current year ± 10 years)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 21 }, (_, i) => currentYear - 10 + i);
+
+  const handleMonthChange = (e) => {
+    const newMonth = parseInt(e.target.value);
+    setCurrentMonth(new Date(currentMonth.getFullYear(), newMonth, 1));
+  };
+
+  const handleYearChange = (e) => {
+    const newYear = parseInt(e.target.value);
+    setCurrentMonth(new Date(newYear, currentMonth.getMonth(), 1));
+  };
+
+  const days = [];
+  // Adjust for Sunday being 0, Monday should be 0 in our grid
+  const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+  
+  for (let i = 0; i < adjustedFirstDay; i++) {
+    days.push(<div key={`empty-${i}`} className="h-9" />);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    days.push(
+      <button
+        key={day}
+        type="button"
+        onClick={() => selectDate(day)}
+        className={`h-9 rounded-xl text-sm font-bold transition-all hover:scale-110 ${
+          isSelectedDate(day)
+            ? isDark 
+              ? 'bg-indigo-600 text-white shadow-lg' 
+              : 'bg-teal-600 text-white shadow-lg'
+            : isToday(day)
+            ? isDark
+              ? 'bg-indigo-500/20 text-indigo-300 ring-2 ring-indigo-500/50'
+              : 'bg-teal-100 text-teal-700 ring-2 ring-teal-400'
+            : isDark
+            ? 'text-slate-300 hover:bg-white/10'
+            : 'text-slate-700 hover:bg-slate-100'
+        }`}
+      >
+        {day}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      ref={calendarRef}
+      className={`absolute top-full left-0 mt-2 z-50 rounded-3xl shadow-2xl border p-5 backdrop-blur-xl animate-in zoom-in-95 slide-in-from-top-2 duration-200 min-w-[320px] ${
+        isDark ? 'bg-[#151623]/95 border-white/10' : 'bg-white/95 border-slate-200'
+      }`}
+    >
+      {/* Header with Dropdowns */}
+      <div className="flex items-center justify-center gap-3 mb-4">
+        <select
+          value={currentMonth.getMonth()}
+          onChange={handleMonthChange}
+          className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 ${
+            isDark 
+              ? 'bg-white/10 text-white hover:bg-white/20 focus:ring-indigo-500' 
+              : 'bg-slate-100 text-slate-800 hover:bg-slate-200 focus:ring-teal-500'
+          }`}
+        >
+          {monthNames.map((name, idx) => (
+            <option key={idx} value={idx} className={isDark ? 'bg-[#151623] text-white' : 'bg-white text-slate-800'}>
+              {name}
+            </option>
+          ))}
+        </select>
+        
+        <select
+          value={currentMonth.getFullYear()}
+          onChange={handleYearChange}
+          className={`px-3 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 ${
+            isDark 
+              ? 'bg-white/10 text-white hover:bg-white/20 focus:ring-indigo-500' 
+              : 'bg-slate-100 text-slate-800 hover:bg-slate-200 focus:ring-teal-500'
+          }`}
+        >
+          {years.map((year) => (
+            <option key={year} value={year} className={isDark ? 'bg-[#151623] text-white' : 'bg-white text-slate-800'}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Day Names - Starting from Monday */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((name) => (
+          <div
+            key={name}
+            className={`text-center text-[10px] font-black uppercase ${
+              isDark ? 'text-slate-500' : 'text-slate-400'
+            }`}
+          >
+            {name}
+          </div>
+        ))}
+      </div>
+
+      {/* Days Grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days}
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const { currentAccount, updateSettings, isLoading } = useAuth();
+  const { transactions, addTransaction, deleteTransaction } = useTransactions();
+  
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const [activeTab, setActiveTab] = useState<'dashboard' | 'laporan' | 'settings' | 'help'>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedReportKey, setSelectedReportKey] = useState<string | null>(null);
 
-  // Tooltip & Settings State
-  const [tooltip, setTooltip] = useState<{ show: boolean; text: string; rect: DOMRect | null; position: 'top' | 'bottom' }>({
+  // Tooltip State
+  const [tooltip, setTooltip] = useState<TooltipState>({
     show: false, text: '', rect: null, position: 'bottom'
   });
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  
-  const [settings, setSettings] = useState<UserSettings>({
-    name: 'User',
-    theme: 'light',
-    language: 'id',
-    greetingLight: "Langit cerah untuk hari yang cerah di bulan",
-    greetingDark: "Malam yang tenang di bulan"
-  });
 
   // Chart State
   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
@@ -64,88 +255,25 @@ export default function App() {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Load & Save Data
-  useEffect(() => {
-    const savedData = localStorage.getItem('keuanganku_v4');
-    const savedSettings = localStorage.getItem('keuanganku_settings');
-    if (savedData) try { setTransactions(JSON.parse(savedData)); } catch (e) { console.error(e); }
-    if (savedSettings) try { 
-      const parsedSettings = JSON.parse(savedSettings);
-      if (!parsedSettings.greetingLight) parsedSettings.greetingLight = "Langit cerah untuk hari yang cerah di bulan";
-      if (!parsedSettings.greetingDark) parsedSettings.greetingDark = "Malam yang tenang di bulan";
-      setSettings(parsedSettings); 
-    } catch (e) { console.error(e); }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('keuanganku_v4', JSON.stringify(transactions));
-    localStorage.setItem('keuanganku_settings', JSON.stringify(settings));
-  }, [transactions, settings]);
-
-  const t = TRANSLATIONS[settings.language];
-  const isDark = settings.theme === 'dark';
-
-  // --- REFINED THEME STYLES ---
-  const themeStyles = {
-    bgApp: isDark ? 'text-slate-100' : 'text-slate-700',
-    navBg: isDark ? 'bg-[#0B1026]/60 border-white/5 shadow-2xl backdrop-blur-md' : 'bg-white/60 border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl',
-    cardGlass: isDark ? 'bg-[#151623]/60 border-white/5 shadow-xl' : 'bg-white/70 border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.05)] backdrop-blur-xl',
-    cardHover: 'hover:scale-[1.01] transition-transform duration-500 ease-out',
-    textPrimary: isDark ? 'text-white' : 'text-slate-800',
-    textSecondary: isDark ? 'text-slate-400' : 'text-slate-500',
-    accentGradient: isDark ? 'bg-gradient-to-r from-indigo-400 to-cyan-300' : 'bg-gradient-to-r from-teal-500 to-emerald-600',
-    inputBg: isDark ? 'bg-[#0B0C15]/50 border-white/10 text-white' : 'bg-white/50 border-slate-200 text-slate-700',
-    modalBg: isDark ? 'bg-[#151623]/95 border-white/10' : 'bg-white/90 border-white',
-    buttonPrimary: isDark ? 'bg-white text-black hover:bg-slate-200' : 'bg-slate-800 text-white hover:bg-slate-700',
-    tooltipBg: isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-100 text-slate-700',
-    
-    mobileNavContainer: isDark 
-      ? 'bg-[#0B1026]/90 border-t border-white/10 shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.5)] backdrop-blur-xl' 
-      : 'bg-white/90 border-t border-slate-200/50 shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.05)] backdrop-blur-xl',
-    
-    fabBg: isDark
-      ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/40'
-      : 'bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-lg shadow-teal-500/30',
-  };
-
-  // --- Background Generators ---
-  const stars = useMemo(() => Array.from({ length: 60 }).map((_, i) => ({ id: i, top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%`, size: `${Math.random() * 2 + 1}px`, animationDuration: `${Math.random() * 3 + 2}s`, animationDelay: `${Math.random() * 5}s`, opacity: Math.random() * 0.5 + 0.3 })), []);
-  const parkClouds = useMemo(() => Array.from({ length: 6 }).map((_, i) => ({ id: i, top: `${Math.random() * 40}%`, left: `-20%`, scale: Math.random() * 0.6 + 0.6, opacity: Math.random() * 0.3 + 0.6, duration: `${Math.random() * 40 + 40}s`, delay: `${Math.random() * -40}s` })), []);
-  const fallingLeaves = useMemo(() => Array.from({ length: 8 }).map((_, i) => ({ id: i, left: `${Math.random() * 100}%`, scale: Math.random() * 0.4 + 0.2, rotation: Math.random() * 360, duration: `${Math.random() * 15 + 15}s`, delay: `${Math.random() * 15}s` })), []);
-  const birds = useMemo(() => {
-    const items = [];
-    for(let i=0; i<2; i++) items.push({ id: `solo-${i}`, top: `${10 + Math.random() * 20}%`, delay: `${Math.random() * 20}s`, duration: `${25 + Math.random() * 10}s` });
-    for(let i=0; i<3; i++) items.push({ id: `group-${i}`, top: `${20 + Math.random() * 5}%`, delay: `${Math.random() * 20 + 20}s`, duration: `30s` });
-    return items;
-  }, []);
-
-  // --- Data Logic ---
+  // Data calculations - ALL useMemo hooks MUST be here before conditional returns
   const currentMonthKey = getMonthYearKey(new Date().toISOString());
   const allAvailableMonths = useMemo(() => getAvailableMonths(transactions), [transactions]);
 
-  // Active Transactions for Dashboard List (Current Month Only)
   const activeTransactions = useMemo(() => {
     return transactions
       .filter(t => getMonthYearKey(t.date) === currentMonthKey)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions, currentMonthKey]);
 
-  const availableReportMonths = useMemo(() => {
-    return allAvailableMonths;
-  }, [allAvailableMonths]);
-
-  // GLOBAL BALANCE (All time)
   const globalBalance = useMemo(() => {
     return transactions.reduce((acc, t) => {
         return acc + (t.type === 'pemasukan' ? t.amount : -t.amount);
     }, 0);
   }, [transactions]);
 
-  // CURRENT MONTH Summary (For Dashboard Cards)
   const currentSummary = useMemo(() => {
     let totalIn = 0, totalOut = 0, totalDebtTaken = 0, totalDebtPaid = 0, totalReceivablesLent = 0, totalReceivablesPaid = 0;
     
-    // Only process activeTransactions (Current Month)
     activeTransactions.forEach(t => {
       if (t.type === 'pemasukan') {
         totalIn += t.amount;
@@ -166,20 +294,16 @@ export default function App() {
     };
   }, [activeTransactions, globalBalance]);
 
-  // --- Chart Data Preparation ---
   const chartData = useMemo(() => {
-    // 1. Determine which transactions to include
     let filteredTrans = [];
     
     if (chartScope === 'year') {
         const currentYear = new Date().getFullYear();
         filteredTrans = transactions.filter(t => new Date(t.date).getFullYear() === currentYear);
     } else {
-        // Filter by selected month
         filteredTrans = transactions.filter(t => getMonthYearKey(t.date) === chartSelectedMonth);
     }
 
-    // 2. Group by Category
     const grouped = filteredTrans.reduce((acc, t) => {
       if (chartFilter === 'income' && t.type !== 'pemasukan') return acc;
       if (chartFilter === 'expense' && t.type !== 'pengeluaran') return acc;
@@ -195,8 +319,49 @@ export default function App() {
   }, [transactions, chartFilter, chartScope, chartSelectedMonth]);
 
   const totalChartAmount = chartData.reduce((acc, curr) => acc + curr.amount, 0);
+  
+  // Show loading while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-cyan-100">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Early return BEFORE any other hooks
+  if (!currentAccount) {
+    return <LoginPage />;
+  }
 
-  // --- Event Handlers ---
+  const settings = currentAccount.settings;
+  const t = TRANSLATIONS[settings.language];
+  const isDark = settings.theme === 'dark';
+
+  const themeStyles = {
+    bgApp: isDark ? 'text-slate-100' : 'text-slate-700',
+    navBg: isDark ? 'bg-[#0B1026]/60 border-white/5 shadow-2xl backdrop-blur-md' : 'bg-white/60 border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl',
+    cardGlass: isDark ? 'bg-[#151623]/60 border-white/5 shadow-xl' : 'bg-white/70 border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.05)] backdrop-blur-xl',
+    cardHover: 'hover:scale-[1.01] transition-transform duration-500 ease-out',
+    textPrimary: isDark ? 'text-white' : 'text-slate-800',
+    textSecondary: isDark ? 'text-slate-400' : 'text-slate-500',
+    accentGradient: isDark ? 'bg-gradient-to-r from-indigo-400 to-cyan-300' : 'bg-gradient-to-r from-teal-500 to-emerald-600',
+    inputBg: isDark ? 'bg-[#0B0C15]/50 border-white/10 text-white' : 'bg-white/50 border-slate-200 text-slate-700',
+    modalBg: isDark ? 'bg-[#151623]/95 border-white/10' : 'bg-white/90 border-white',
+    buttonPrimary: isDark ? 'bg-white text-black hover:bg-slate-200' : 'bg-slate-800 text-white hover:bg-slate-700',
+    tooltipBg: isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-100 text-slate-700',
+    mobileNavContainer: isDark 
+      ? 'bg-[#0B1026]/90 border-t border-white/10 shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.5)] backdrop-blur-xl' 
+      : 'bg-white/90 border-t border-slate-200/50 shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.05)] backdrop-blur-xl',
+    fabBg: isDark
+      ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/40'
+      : 'bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-lg shadow-teal-500/30',
+  };
+
+  // Event Handlers
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     setCategory(newType === 'pemasukan' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
@@ -205,14 +370,12 @@ export default function App() {
   const handleAddTransaction = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
-    setTransactions([...transactions, {
-      id: crypto.randomUUID(), date, category, description: desc, amount: parseFloat(amount), type
-    }]);
-    setDesc(''); setAmount(''); setIsModalOpen(false);
-  };
-
-  const handleDelete = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+    addTransaction({
+      date, category, description: desc, amount: parseFloat(amount), type
+    });
+    setDesc(''); 
+    setAmount(''); 
+    setIsModalOpen(false);
   };
 
   const handleTouchStart = (text: string, e: React.TouchEvent) => {
@@ -232,70 +395,15 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', label: t.dashboard, desc: t.navDescDashboard, icon: Home },
     { id: 'laporan', label: t.reports, desc: t.navDescReports, icon: FileText },
-    { id: 'settings', label: t.settings, desc: t.navDescSettings, icon: Settings },
+    { id: 'settings', label: t.settings, desc: t.navDescSettings, icon: SettingsIcon },
     { id: 'help', label: t.help, desc: t.navDescHelp, icon: HelpCircle },
   ];
 
   return (
     <div className={`min-h-screen font-sans relative overflow-x-hidden transition-colors duration-700 ${themeStyles.bgApp} antialiased`}>
-      
-      {/* --- BACKGROUND ANIMATION --- */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-        {isDark ? (
-           <>
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-[#0B1026] to-[#050505]" />
-            {stars.map(star => <div key={star.id} className="absolute rounded-full bg-white" style={{ top: star.top, left: star.left, width: star.size, height: star.size, opacity: star.opacity, animation: `twinkle ${star.animationDuration} infinite ease-in-out ${star.animationDelay}` }} />)}
-            <div className="absolute -top-[10%] left-[20%] w-[500px] h-[500px] bg-indigo-900/20 rounded-full blur-[120px] animate-pulse duration-[8s]" />
-            <div className="absolute bottom-[10%] -right-[10%] w-[600px] h-[600px] bg-violet-900/10 rounded-full blur-[130px] animate-pulse duration-[10s]" />
-           </>
-        ) : (
-           <>
-            <div className="absolute inset-0 bg-gradient-to-b from-[#87CEEB] via-[#C8EAFF] to-[#F0FFF4]" />
-            <div className="absolute top-[5%] right-[5%] w-[120px] h-[120px] bg-yellow-100 rounded-full blur-[40px] opacity-80" />
-            {parkClouds.map(cloud => (
-              <div key={cloud.id} className="absolute" style={{ top: cloud.top, left: cloud.left, opacity: cloud.opacity, transform: `scale(${cloud.scale})`, animation: `float-cloud ${cloud.duration} infinite linear ${cloud.delay}` }}>
-                 <div className="w-[100px] h-[40px] bg-white rounded-full blur-[10px] relative">
-                    <div className="absolute -top-[20px] left-[15px] w-[40px] h-[40px] bg-white rounded-full"></div>
-                    <div className="absolute -top-[30px] left-[40px] w-[50px] h-[50px] bg-white rounded-full"></div>
-                 </div>
-              </div>
-            ))}
-            {birds.map(bird => (
-                <div key={bird.id} className="absolute text-slate-600/40" style={{ top: bird.top, left: '-50px', animation: `fly-bird ${bird.duration} infinite linear ${bird.delay}` }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M2 12C2 12 5 9 12 12C19 15 22 12 22 12"/></svg>
-                </div>
-            ))}
-            {fallingLeaves.map(leaf => (
-                <div key={leaf.id} className="absolute text-emerald-200/60" style={{ top: '-20px', left: leaf.left, transform: `scale(${leaf.scale})`, animation: `fall-leaf ${leaf.duration} infinite ease-in-out ${leaf.delay}` }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{transform: `rotate(${leaf.rotation}deg)`}}><path d="M12 2C12 2 14 8 20 12C14 16 12 22 12 22C12 22 10 16 4 12C10 8 12 2 12 2Z"/></svg>
-                </div>
-            ))}
-           </>
-        )}
-      </div>
+      <Background isDark={isDark} />
 
-      <style>{`
-        @keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(0.5); } 50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 3px white; } }
-        @keyframes float-cloud { 0% { transform: translateX(0) scale(1); } 100% { transform: translateX(120vw) scale(1); } }
-        @keyframes fly-bird { 0% { transform: translateX(0) translateY(0) scale(0.8); } 25% { transform: translateX(30vw) translateY(10px) scale(0.8); } 50% { transform: translateX(60vw) translateY(-5px) scale(0.8); } 100% { transform: translateX(110vw) translateY(0) scale(0.8); } }
-        @keyframes fall-leaf { 0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(110vh) translateX(50px) rotate(360deg); opacity: 0; } }
-        
-        .custom-date-trigger::-webkit-calendar-picker-indicator {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            opacity: 0;
-            cursor: pointer;
-        }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
-
-      {/* --- TOOLTIP --- */}
+      {/* Tooltip */}
       {tooltip.show && tooltip.rect && (
         <div 
           className={`fixed z-[60] px-4 py-2.5 rounded-2xl text-[10px] uppercase font-black tracking-widest shadow-2xl border backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 pointer-events-none ${themeStyles.tooltipBg}`}
@@ -306,17 +414,15 @@ export default function App() {
           }}
         >
           {tooltip.text}
-          <div className={`absolute left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 border-l border-t ${themeStyles.tooltipBg} ${tooltip.position === 'bottom' ? '-top-1.5 border-b-0 border-r-0' : '-bottom-1.5 border-t-0 border-l-0 bg-inherit'}`} />
         </div>
       )}
 
-      {/* --- NAVBAR --- */}
-      <nav className={`${themeStyles.navBg} sticky top-0 z-30 transition-all duration-500 border-b`}>
+      {/* Navbar */}
+      <nav className={`${themeStyles.navBg} sticky top-0 z-30 transition-all duration-500`}>
         <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 group cursor-default">
-            <div className={`relative w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-500 group-hover:rotate-[15deg] ${isDark ? 'bg-gradient-to-tr from-indigo-600 to-purple-600' : 'bg-gradient-to-tr from-teal-400 to-emerald-500'}`}>
-              <Cloud size={20} className="text-white relative z-10" fill="currentColor" />
-              <div className="absolute inset-0 rounded-2xl bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="transition-transform duration-500 group-hover:rotate-[15deg]">
+              <Logo isDark={isDark} size={40} />
             </div>
             <div className="flex flex-col">
               <span className={`font-black text-xl tracking-tighter leading-none bg-clip-text text-transparent ${themeStyles.accentGradient}`}>
@@ -333,7 +439,7 @@ export default function App() {
                   onClick={() => {setActiveTab(item.id as any); setSelectedReportKey(null);}} 
                   onMouseEnter={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setTooltip({ show: true, text: item.desc, rect, position: 'bottom' }); }}
                   onMouseLeave={() => setTooltip(prev => ({ ...prev, show: false }))}
-                  className={`px-5 py-2.5 text-sm font-bold rounded-2xl transition-all duration-300 flex items-center gap-2.5 ${activeTab === item.id ? (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white') : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}
+                  className={`px-5 py-2.5 text-sm font-bold rounded-2xl transition-all duration-300 flex items-center gap-2.5 ${activeTab === item.id ? (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white') : 'opacity-60 hover:opacity-100'}`}
               >
                   <item.icon size={18} strokeWidth={activeTab === item.id ? 2.5 : 2} />
                   <span>{item.label}</span>
@@ -347,9 +453,8 @@ export default function App() {
         </div>
       </nav>
 
-      {/* --- CONTENT --- */}
+      {/* Main Content */}
       <main className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-10 pb-32 md:pb-20">
-        
         {activeTab === 'dashboard' && (
           <div className="space-y-8 md:space-y-10 animate-in slide-in-from-bottom-8 duration-700">
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -358,16 +463,15 @@ export default function App() {
                   {t.hello}, <span className={`text-transparent bg-clip-text ${themeStyles.accentGradient}`}>{settings.name}</span>.
                 </h1>
                 <p className={`${themeStyles.textSecondary} text-lg font-medium`}>
-                   {isDark ? settings.greetingDark : settings.greetingLight} <span className={`font-bold ${isDark ? 'text-indigo-400' : 'text-teal-600'}`}>{getMonthName(currentMonthKey, settings.language)}</span>.
+                  {isDark ? settings.greetingDark : settings.greetingLight} <span className={`font-bold ${isDark ? 'text-indigo-400' : 'text-teal-600'}`}>{getMonthName(currentMonthKey, settings.language)}</span>.
                 </p>
               </div>
             </header>
 
+            {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-              {/* Summary Cards */}
               <div className={`col-span-1 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden group hover:scale-[1.02] transition-transform duration-500 ${isDark ? 'bg-gradient-to-bl from-indigo-600 via-purple-700 to-slate-900' : 'bg-gradient-to-bl from-teal-400 via-emerald-500 to-cyan-600'}`}>
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                <div className="absolute bottom-0 left-0 w-40 h-40 bg-black/10 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
                 <div className="relative z-10 h-full flex flex-col justify-between">
                     <div>
                         <div className="flex items-center gap-3 mb-4 opacity-80">
@@ -376,15 +480,10 @@ export default function App() {
                         </div>
                         <h3 className="text-4xl lg:text-5xl font-black tracking-tight leading-none">{formatRupiah(currentSummary.balance)}</h3>
                     </div>
-                    <div className="mt-8 flex items-center gap-2">
-                         <span className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold border border-white/10">
-                            {t.netCashflow}
-                         </span>
-                    </div>
                 </div>
               </div>
 
-              <div className={`${themeStyles.cardGlass} ${themeStyles.cardHover} backdrop-blur-xl rounded-[2.5rem] p-8 flex flex-col justify-between border`}>
+              <div className={`${themeStyles.cardGlass} ${themeStyles.cardHover} backdrop-blur-xl rounded-[2.5rem] p-8 flex flex-col justify-between`}>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <p className={`${themeStyles.textSecondary} text-xs font-bold uppercase tracking-widest mb-2`}>{t.income}</p>
@@ -407,7 +506,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className={`${themeStyles.cardGlass} ${themeStyles.cardHover} backdrop-blur-xl rounded-[2.5rem] p-8 flex flex-col justify-between border`}>
+              <div className={`${themeStyles.cardGlass} ${themeStyles.cardHover} backdrop-blur-xl rounded-[2.5rem] p-8 flex flex-col justify-between`}>
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <p className={`${themeStyles.textSecondary} text-xs font-bold uppercase tracking-widest mb-2`}>{t.expense}</p>
@@ -431,14 +530,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* --- LIST & CHART SECTION --- */}
+            {/* Transaction List & Charts */}
             <section className="space-y-8">
                 <div className="flex items-center justify-between">
                     <h3 className={`font-black text-2xl ${themeStyles.textPrimary} flex items-center gap-3`}>
                         <div className={`p-2 rounded-xl ${isDark ? 'bg-white/10' : 'bg-white shadow-sm text-teal-600'}`}><History size={20}/></div>
                         {t.recentActivity}
                     </h3>
-                    {/* Desktop Button only */}
                     <button onClick={() => setIsModalOpen(true)} className={`hidden md:flex group ${themeStyles.buttonPrimary} px-6 py-3 rounded-2xl text-sm font-bold items-center gap-3 transition-all hover:-translate-y-1 active:scale-95`}>
                         <Plus size={18} strokeWidth={3}/> {t.newRecord}
                     </button>
@@ -446,7 +544,7 @@ export default function App() {
 
                 <div className="space-y-4">
                     {activeTransactions.length > 0 ? activeTransactions.map((tItem) => (
-                    <div key={tItem.id} className={`group relative p-5 rounded-[1.5rem] transition-all flex items-center justify-between border-b-4 border-transparent hover:border-b-4 hover:translate-x-1 ${themeStyles.cardGlass} border ${isDark ? 'hover:border-indigo-500/30' : 'hover:border-teal-300'} `}>
+                    <div key={tItem.id} className={`group relative p-5 rounded-[1.5rem] transition-all flex items-center justify-between border-b-4 border-transparent hover:border-b-4 hover:translate-x-1 ${themeStyles.cardGlass} ${isDark ? 'hover:border-indigo-500/30' : 'hover:border-teal-300'} `}>
                         <div className="flex items-center gap-5">
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl shadow-sm transition-transform group-hover:scale-110 group-hover:rotate-6 ${tItem.type === 'pemasukan' ? (isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-600') : (isDark ? 'bg-rose-500/20 text-rose-400' : 'bg-rose-100 text-rose-600')}`}>
                             {tItem.type === 'pemasukan' ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
@@ -465,7 +563,7 @@ export default function App() {
                             <p className={`font-black text-lg ${tItem.type === 'pemasukan' ? 'text-emerald-500' : 'text-rose-500'}`}>
                             {tItem.type === 'pemasukan' ? '+' : '-'} {formatRupiah(tItem.amount)}
                             </p>
-                            <button onClick={() => handleDelete(tItem.id)} className={`text-[10px] font-bold mt-2 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100`}>{t.delete}</button>
+                            <button onClick={() => deleteTransaction(tItem.id)} className={`text-[10px] font-bold mt-2 opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100`}>{t.delete}</button>
                         </div>
                     </div>
                     )) : (
@@ -479,7 +577,7 @@ export default function App() {
                     )}
                 </div>
 
-                {/* --- CHART SECTION --- */}
+                {/* Charts Section */}
                 {transactions.length > 0 && (
                     <div className={`${themeStyles.cardGlass} backdrop-blur-xl rounded-[2.5rem] p-6 md:p-8 border mt-10 transition-all duration-500`}>
                         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8">
@@ -487,10 +585,8 @@ export default function App() {
                                 <Activity size={24} className={isDark ? 'text-indigo-400' : 'text-teal-600'}/> {t.chartTitle}
                             </h3>
                             
-                            {/* Horizontal scrolling wrapper for filters on mobile */}
                             <div className="w-full overflow-x-auto pb-2 -mb-2 no-scrollbar">
                                 <div className="flex flex-row gap-3 min-w-max">
-                                    {/* Scope Selector */}
                                     <div className={`flex p-1 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-white'}`}>
                                         <button 
                                             onClick={() => setChartScope('month')}
@@ -506,7 +602,6 @@ export default function App() {
                                         </button>
                                     </div>
 
-                                    {/* Month Selector */}
                                     {chartScope === 'month' && (
                                         <div className="relative group">
                                             <select 
@@ -522,23 +617,21 @@ export default function App() {
                                         </div>
                                     )}
 
-                                    {/* Chart Type */}
                                     <div className={`flex p-1 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-white'}`}>
                                         {[
                                             { id: 'pie', icon: PieChart, label: t.chartPie },
                                             { id: 'bar', icon: BarChart3, label: t.chartBar },
-                                        ].map(type => (
+                                        ].map(chartTypeOption => (
                                             <button 
-                                                key={type.id} 
-                                                onClick={() => setChartType(type.id as any)}
-                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${chartType === type.id ? (isDark ? 'bg-indigo-600 text-white shadow' : 'bg-white text-teal-600 shadow-sm') : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-teal-600')}`}
+                                                key={chartTypeOption.id} 
+                                                onClick={() => setChartType(chartTypeOption.id as any)}
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${chartType === chartTypeOption.id ? (isDark ? 'bg-indigo-600 text-white shadow' : 'bg-white text-teal-600 shadow-sm') : (isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-teal-600')}`}
                                             >
-                                                <type.icon size={14}/> <span className="hidden sm:inline">{type.label}</span>
+                                                <chartTypeOption.icon size={14}/> <span className="hidden sm:inline">{chartTypeOption.label}</span>
                                             </button>
                                         ))}
                                     </div>
 
-                                    {/* Data Filter */}
                                     <div className={`flex p-1 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-white'}`}>
                                         {[
                                             { id: 'expense', label: t.filterOut },
@@ -560,7 +653,7 @@ export default function App() {
 
                         <div className={`rounded-3xl p-6 min-h-[300px] flex items-center justify-center relative ${isDark ? 'bg-black/20' : 'bg-white/40'}`}>
                             {chartType === 'pie' && <PieChartComponent chartData={chartData} totalChartAmount={totalChartAmount} setSelectedChartItem={setSelectedChartItem} />}
-                            {chartType === 'bar' && <BarChartComponent chartData={chartData} setSelectedChartItem={setSelectedChartItem} formatRupiah={formatRupiah} themeStyles={themeStyles} />}
+                            {chartType === 'bar' && <BarChartComponent chartData={chartData} setSelectedChartItem={setSelectedChartItem} themeStyles={themeStyles} />}
                         </div>
 
                         {selectedChartItem && (
@@ -584,121 +677,22 @@ export default function App() {
         )}
 
         {activeTab === 'laporan' && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {selectedReportKey ? (
-              <div className="space-y-8">
-                <button onClick={() => setSelectedReportKey(null)} className={`flex items-center gap-3 font-bold transition-all px-6 py-3 rounded-2xl w-fit group hover:pl-4 ${isDark ? 'bg-white/10 hover:bg-white/20' : 'bg-white hover:bg-white/80 text-slate-600 shadow-sm'}`}>
-                  <ArrowLeft size={20} className="transition-transform group-hover:-translate-x-1"/> {t.backToFolder}
-                </button>
-                
-                <div className={`${themeStyles.cardGlass} backdrop-blur-xl rounded-[2.5rem] shadow-2xl overflow-hidden border`}>
-                  <div className={`p-10 flex justify-between items-center ${isDark ? 'bg-white/5' : 'bg-gradient-to-r from-teal-50/50 to-blue-50/50'}`}>
-                    <div>
-                      <h2 className={`text-3xl font-black ${themeStyles.textPrimary}`}>{t.accountingLedger}</h2>
-                      <p className={`${themeStyles.textSecondary} font-medium mt-2 flex items-center gap-2`}>
-                        <Calendar size={16}/> {t.period} <span className="font-bold">{getMonthName(selectedReportKey, settings.language)}</span>
-                      </p>
-                    </div>
-                    <div className={`p-5 rounded-3xl shadow-sm ${isDark ? 'bg-white/10 text-white' : 'bg-white text-blue-600'}`}>
-                      <FileText size={32}/>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className={`border-b ${isDark ? 'border-white/10 bg-white/5' : 'border-slate-100 bg-slate-50/30'}`}>
-                        <tr>
-                          <th className={`px-4 py-6 text-left font-black text-[10px] uppercase tracking-widest ${themeStyles.textSecondary}`}>No.</th>
-                          
-                          {[t.date, t.category, t.note, t.in, t.out, t.balance].map((head, i) => (
-                              <th key={i} className={`px-8 py-6 text-left font-black text-[10px] uppercase tracking-widest ${themeStyles.textSecondary} ${i > 2 ? 'text-right' : ''}`}>{head}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-                        {(() => {
-                          // Calculate Opening Balance
-                          const openingBalance = transactions
-                            .filter(t => getMonthYearKey(t.date) < selectedReportKey)
-                            .reduce((acc, t) => acc + (t.type === 'pemasukan' ? t.amount : -t.amount), 0);
-
-                          let runningBal = openingBalance;
-                          
-                          const filtered = transactions.filter(t => getMonthYearKey(t.date) === selectedReportKey).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                          const totalDebit = filtered.filter(t => t.type === 'pemasukan').reduce((acc, curr) => acc + curr.amount, 0);
-                          const totalCredit = filtered.filter(t => t.type === 'pengeluaran').reduce((acc, curr) => acc + curr.amount, 0);
-
-                          const rows = filtered.map((tItem, idx) => {
-                              const isDebit = tItem.type === 'pemasukan';
-                              runningBal += isDebit ? tItem.amount : -tItem.amount;
-                              return (
-                                <tr key={tItem.id} className={`transition-colors hover:bg-black/5`}>
-                                  <td className={`px-4 py-5 font-medium ${themeStyles.textSecondary}`}>{idx + 1}</td>
-                                  
-                                  <td className={`px-8 py-5 font-medium ${themeStyles.textSecondary}`}>{new Date(tItem.date).getDate()}</td>
-                                  <td className={`px-8 py-5 font-bold ${themeStyles.textPrimary}`}>{tItem.category}</td>
-                                  <td className="px-8 py-5 text-slate-400 italic max-w-[200px] truncate">{tItem.description || '-'}</td>
-                                  <td className="px-8 py-5 text-right font-bold text-emerald-500 whitespace-nowrap min-w-[150px]">{isDebit ? formatRupiah(tItem.amount) : ''}</td>
-                                  <td className="px-8 py-5 text-right font-bold text-rose-500 whitespace-nowrap min-w-[150px]">{!isDebit ? formatRupiah(tItem.amount) : ''}</td>
-                                  <td className={`px-8 py-5 text-right font-black whitespace-nowrap min-w-[150px] ${themeStyles.textPrimary}`}>{formatRupiah(runningBal)}</td>
-                                </tr>
-                              );
-                            });
-                           return (
-                             <>
-                               {/* Opening Balance Row */}
-                               <tr className={`font-bold italic ${isDark ? 'bg-white/5' : 'bg-slate-50/50'}`}>
-                                 <td colSpan={6} className="px-8 py-4 text-right opacity-70">{t.openingBalance}</td>
-                                 <td className={`px-8 py-4 text-right font-black whitespace-nowrap min-w-[150px] ${themeStyles.textPrimary}`}>{formatRupiah(openingBalance)}</td>
-                               </tr>
-                               {rows}
-                               <tr className={`font-black text-sm ${isDark ? 'bg-white/5' : 'bg-slate-50/50'}`}>
-                                 <td colSpan={4} className="px-8 py-6 text-right uppercase tracking-widest text-xs opacity-50">{t.totalFinal}</td>
-                                 <td className="px-8 py-6 text-right text-emerald-500 whitespace-nowrap min-w-[150px]">{formatRupiah(totalDebit)}</td>
-                                 <td className="px-8 py-6 text-right text-rose-500 whitespace-nowrap min-w-[150px]">{formatRupiah(totalCredit)}</td>
-                                 <td className={`px-8 py-6 text-right whitespace-nowrap min-w-[150px] ${isDark ? 'text-indigo-400' : 'text-blue-600'}`}>{formatRupiah(openingBalance + totalDebit - totalCredit)}</td>
-                               </tr>
-                             </>
-                           );
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h2 className={`text-3xl font-black mb-8 tracking-tight ${themeStyles.textPrimary} flex items-center gap-4`}>
-                    <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/10' : 'bg-white shadow-sm'}`}><FolderOpen className={isDark ? 'text-indigo-400' : 'text-blue-600'}/></div>
-                    {t.monthlyArchive}
-                </h2>
-                {availableReportMonths.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-                    {availableReportMonths.map(key => (
-                      <button key={key} onClick={() => setSelectedReportKey(key)} className={`${themeStyles.cardGlass} p-8 rounded-[2.5rem] flex flex-col items-center group hover:-translate-y-2 hover:shadow-2xl transition-all duration-300 border`}>
-                        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 group-hover:rotate-12 transition-transform shadow-sm ${isDark ? 'bg-gradient-to-tr from-amber-600/20 to-orange-600/20 text-orange-400' : 'bg-gradient-to-tr from-amber-100 to-orange-100 text-orange-500'}`}>
-                          <Calendar size={32} strokeWidth={2.5}/>
-                        </div>
-                        <span className={`font-bold text-xl ${themeStyles.textPrimary}`}>{getMonthName(key, settings.language)}</span>
-                        <span className={`text-[10px] uppercase font-black tracking-widest mt-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-white/10 text-slate-300' : 'bg-slate-100 text-slate-500'}`}>{t.openData}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={`py-32 text-center rounded-[3rem] border-2 border-dashed ${isDark ? 'border-white/10' : 'border-slate-300'}`}>
-                    <FolderOpen size={80} className={`mx-auto mb-6 opacity-20`}/>
-                    <p className="font-bold text-xl opacity-50">{t.emptyArchive}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ReportsTab 
+            transactions={transactions}
+            language={settings.language}
+            translations={t}
+            isDark={isDark}
+            selectedReportKey={selectedReportKey}
+            setSelectedReportKey={setSelectedReportKey}
+            accountName={settings.name}
+          />
         )}
 
         {activeTab === 'settings' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
              <div className={`${themeStyles.cardGlass} backdrop-blur-xl rounded-[2.5rem] p-10 border shadow-2xl`}>
                 <h2 className={`text-3xl font-black mb-10 flex items-center gap-4 ${themeStyles.textPrimary}`}>
-                  <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}><Settings /></div>
+                  <div className={`p-3 rounded-2xl ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}><SettingsIcon /></div>
                   {t.settings}
                 </h2>
                 <div className="space-y-10">
@@ -706,21 +700,21 @@ export default function App() {
                     <h3 className={`text-xs font-black uppercase tracking-widest mb-6 border-b pb-2 ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>{t.profile}</h3>
                     <div className="relative">
                         <User className={`absolute left-5 top-1/2 -translate-y-1/2 ${themeStyles.textSecondary}`} size={20}/>
-                        <input type="text" value={settings.name} onChange={(e) => setSettings({...settings, name: e.target.value})} className={`w-full pl-14 pr-6 py-5 rounded-2xl outline-none transition-all font-bold text-lg shadow-sm border ${themeStyles.inputBg}`}/>
+                        <input type="text" value={settings.name} onChange={(e) => updateSettings({name: e.target.value})} className={`w-full pl-14 pr-6 py-5 rounded-2xl outline-none transition-all font-bold text-lg shadow-sm ${themeStyles.inputBg}`}/>
                     </div>
                   </section>
                   <section>
                     <h3 className={`text-xs font-black uppercase tracking-widest mb-6 border-b pb-2 ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>{t.greetingMessage} ({isDark ? 'Dark' : 'Light'})</h3>
                     <div className="relative">
                         <Edit3 className={`absolute left-5 top-1/2 -translate-y-1/2 ${themeStyles.textSecondary}`} size={20}/>
-                        <input type="text" value={isDark ? settings.greetingDark : settings.greetingLight} onChange={(e) => setSettings({...settings, [isDark ? 'greetingDark' : 'greetingLight']: e.target.value})} className={`w-full pl-14 pr-6 py-5 rounded-2xl outline-none transition-all font-bold text-lg shadow-sm border ${themeStyles.inputBg}`}/>
+                        <input type="text" value={isDark ? settings.greetingDark : settings.greetingLight} onChange={(e) => updateSettings(isDark ? {greetingDark: e.target.value} : {greetingLight: e.target.value})} className={`w-full pl-14 pr-6 py-5 rounded-2xl outline-none transition-all font-bold text-lg shadow-sm ${themeStyles.inputBg}`}/>
                     </div>
                   </section>
                   <section>
                     <h3 className={`text-xs font-black uppercase tracking-widest mb-6 border-b pb-2 ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>{t.appearance}</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                        {['light', 'dark'].map((thm) => (
-                         <button key={thm} onClick={() => setSettings({...settings, theme: thm as any})} className={`p-6 rounded-3xl border flex items-center gap-4 transition-all ${settings.theme === thm ? (isDark ? 'bg-indigo-500/20 border-indigo-500 text-white' : 'bg-teal-100 border-teal-400 text-teal-800') : (isDark ? 'bg-white/5 border-transparent hover:bg-white/10' : 'bg-white border-slate-100 hover:bg-slate-50')}`}>
+                         <button key={thm} onClick={() => updateSettings({theme: thm as any})} className={`p-6 rounded-3xl border flex items-center gap-4 transition-all ${settings.theme === thm ? (isDark ? 'bg-indigo-500/20 border-indigo-500 text-white' : 'bg-teal-100 border-teal-400 text-teal-800') : (isDark ? 'bg-white/5 border-transparent hover:bg-white/10' : 'bg-white border-slate-100 hover:bg-slate-50')}`}>
                             <div className={`p-3 rounded-full ${thm === 'light' ? 'bg-orange-100 text-orange-500' : 'bg-indigo-900 text-indigo-400'}`}>{thm === 'light' ? <Sun size={24}/> : <Moon size={24}/>}</div>
                             <span className="font-bold text-lg">{thm === 'light' ? t.themeLight : t.themeDark}</span>
                          </button>
@@ -730,13 +724,16 @@ export default function App() {
                    <section>
                     <h3 className={`text-xs font-black uppercase tracking-widest mb-6 border-b pb-2 ${isDark ? 'border-white/10 text-slate-500' : 'border-slate-200 text-slate-400'}`}>{t.language}</h3>
                     <div className="grid grid-cols-2 gap-5">
-                       {['id', 'en'].map((lng) => (
-                         <button key={lng} onClick={() => setSettings({...settings, language: lng as any})} className={`py-4 px-6 rounded-2xl border font-bold transition-all ${settings.language === lng ? (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white') : (isDark ? 'bg-white/5 border-transparent hover:bg-white/10' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50')}`}>
+                       {(['id', 'en'] as const).map((lng) => (
+                         <button key={lng} onClick={() => updateSettings({language: lng})} className={`py-4 px-6 rounded-2xl border font-bold transition-all ${settings.language === lng ? (isDark ? 'bg-white text-black' : 'bg-slate-900 text-white') : (isDark ? 'bg-white/5 border-transparent hover:bg-white/10' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50')}`}>
                             {lng === 'id' ? 'Bahasa Indonesia' : 'English (US)'}
                          </button>
                        ))}
                     </div>
                   </section>
+
+                  {/* Account Management */}
+                  <AccountManager language={settings.language} translations={t} isDark={isDark} />
                 </div>
              </div>
           </div>
@@ -755,7 +752,7 @@ export default function App() {
                    {[
                       { title: t.tut1Title, desc: t.tut1Desc, icon: Plus, color: isDark ? 'text-emerald-300 bg-emerald-900/30' : 'text-emerald-600 bg-emerald-100' },
                       { title: t.tut2Title, desc: t.tut2Desc, icon: FileText, color: isDark ? 'text-blue-300 bg-blue-900/30' : 'text-blue-600 bg-blue-100' },
-                      { title: t.tut3Title, desc: t.tut3Desc, icon: Settings, color: isDark ? 'text-purple-300 bg-purple-900/30' : 'text-purple-600 bg-purple-100' },
+                      { title: t.tut3Title, desc: t.tut3Desc, icon: SettingsIcon, color: isDark ? 'text-purple-300 bg-purple-900/30' : 'text-purple-600 bg-purple-100' },
                    ].map((tut, i) => (
                       <div key={i} className={`flex gap-6 p-8 rounded-[2rem] border transition-all hover:scale-[1.01] ${isDark ? 'bg-white/5 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
                          <div className={`shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center text-2xl ${tut.color}`}>
@@ -775,10 +772,9 @@ export default function App() {
         <footer className={`text-center mt-16 mb-4 text-[10px] font-black uppercase tracking-[0.3em] opacity-30 ${themeStyles.textSecondary}`}>
           Created by mhalwiii
         </footer>
-
       </main>
 
-      {/* --- MOBILE FAB (Floating) --- */}
+      {/* Mobile FAB */}
       <button 
         onClick={() => setIsModalOpen(true)}
         className={`md:hidden fixed bottom-28 right-6 z-50 w-16 h-16 rounded-[1.2rem] flex items-center justify-center shadow-2xl animate-in zoom-in slide-in-from-bottom-10 active:scale-90 transition-transform ${themeStyles.fabBg}`}
@@ -786,7 +782,7 @@ export default function App() {
         <Plus size={32} strokeWidth={3} />
       </button>
 
-      {/* --- MOBILE BOTTOM NAV (Floating Pill) --- */}
+      {/* Mobile Bottom Nav */}
       <div className={`md:hidden fixed bottom-6 inset-x-6 z-40 rounded-[2.5rem] backdrop-blur-xl h-20 flex justify-evenly items-center ${themeStyles.mobileNavContainer}`}>
           {navItems.map(item => (
             <button
@@ -801,7 +797,7 @@ export default function App() {
           ))}
       </div>
 
-      {/* MODAL */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[70] flex items-center justify-center p-4 overflow-y-auto">
           <div className={`${themeStyles.modalBg} backdrop-blur-2xl w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 border`}>
@@ -821,7 +817,7 @@ export default function App() {
                 <div>
                   <label className={`text-[10px] font-black uppercase tracking-widest block mb-3 ml-2 ${themeStyles.textSecondary}`}>{t.category}</label>
                   <div className="relative group">
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className={`w-full rounded-3xl px-6 py-5 text-sm appearance-none focus:ring-4 outline-none transition-all font-bold cursor-pointer shadow-sm border ${themeStyles.inputBg}`}>
+                    <select value={category} onChange={(e) => setCategory(e.target.value)} className={`w-full rounded-3xl px-6 py-5 text-sm appearance-none focus:ring-4 outline-none transition-all font-bold cursor-pointer shadow-sm ${themeStyles.inputBg}`}>
                       {(type === 'pemasukan' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <ChevronDown size={20} className={`absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${themeStyles.textSecondary}`}/>
@@ -831,24 +827,20 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-5">
                   <div>
                     <label className={`text-[10px] font-black uppercase tracking-widest block mb-3 ml-2 ${themeStyles.textSecondary}`}>{t.date}</label>
-                    
-                    <div 
-                      className={`relative w-full rounded-3xl px-5 py-5 text-sm font-bold shadow-sm cursor-pointer hover:opacity-80 transition-opacity border ${themeStyles.inputBg} flex items-center`}
-                    >
-                      <span>{new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <div className="relative">
+                      <Calendar size={18} className={`absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none z-10 ${isDark ? 'text-indigo-400' : 'text-teal-600'}`} />
                       <input 
                         type="date" 
                         value={date} 
                         onChange={(e) => setDate(e.target.value)} 
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 custom-date-trigger" 
+                        className={`w-full rounded-3xl pl-14 pr-5 py-5 text-sm font-bold focus:ring-4 outline-none shadow-sm cursor-pointer ${themeStyles.inputBg}`} 
                         required 
                       />
                     </div>
-
                   </div>
                   <div>
                     <label className={`text-[10px] font-black uppercase tracking-widest block mb-3 ml-2 ${themeStyles.textSecondary}`}>{t.amount}</label>
-                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className={`w-full rounded-3xl px-5 py-5 text-sm font-black focus:ring-4 outline-none shadow-sm border ${themeStyles.inputBg} ${isDark ? 'text-indigo-400' : 'text-teal-600'}`} required />
+                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className={`w-full rounded-3xl px-5 py-5 text-sm font-black focus:ring-4 outline-none shadow-sm ${themeStyles.inputBg} ${isDark ? 'text-indigo-400' : 'text-teal-600'}`} required />
                   </div>
                 </div>
 
@@ -857,7 +849,7 @@ export default function App() {
                     <span>{t.note}</span>
                     <span className="opacity-50 font-normal lowercase italic">{t.optional}</span>
                   </label>
-                  <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t.descPlaceholder} className={`w-full rounded-3xl px-6 py-5 text-sm focus:ring-4 outline-none font-medium placeholder:opacity-40 shadow-sm border ${themeStyles.inputBg}`} />
+                  <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t.descPlaceholder} className={`w-full rounded-3xl px-6 py-5 text-sm focus:ring-4 outline-none font-medium placeholder:opacity-40 shadow-sm ${themeStyles.inputBg}`} />
                 </div>
               </div>
 
@@ -868,6 +860,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt language={settings.language} isDark={isDark} />
     </div>
   );
 }

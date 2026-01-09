@@ -1,186 +1,166 @@
-# FinaryApp - Finance Diary 💰
+# FinaryApp - Finance Diary
 
-Aplikasi pencatat keuangan pribadi yang indah dan mudah digunakan. Kelola pemasukan, pengeluaran, utang, dan piutang dengan antarmuka yang menarik.
+A beautiful and modern financial tracking application built with React, TypeScript, and Tailwind CSS.
 
-## ✨ Fitur Utama
+## Features
 
-- 📊 **Dashboard Interaktif** - Lihat saldo, pemasukan, pengeluaran, dan tracking utang/piutang
-- 📈 **Visualisasi Data** - Grafik pie dan bar chart untuk analisis keuangan
-- 📁 **Laporan Bulanan** - Arsip buku besar otomatis setiap bulan
-- 🎨 **Tema Light & Dark** - Animasi background yang indah (bintang & awan)
-- 🌐 **Dwi-bahasa** - Bahasa Indonesia & English
-- 💾 **Penyimpanan Lokal** - Data tersimpan otomatis di browser
-- 📱 **Responsive** - Optimal untuk desktop & mobile
+- 📊 **Transaction Management**: Track income and expenses with detailed categories
+- 📈 **Visual Analytics**: Pie and bar charts for spending analysis
+- 🌓 **Dark/Light Theme**: Beautiful day and night themes
+- 🌐 **Multi-language**: Support for Indonesian and English
+- 👤 **Multi-Account**: Manage multiple financial accounts
+- 🔐 **Secure Login**: Account-based authentication system
+- 📱 **Responsive Design**: Works perfectly on mobile and desktop
+- ✨ **Beautiful UI**: Glassmorphism design with smooth animations
 
-## 🚀 Cara Menggunakan
+## Tech Stack
 
-### 1. Install Dependencies
+- **React 18** - UI library
+- **TypeScript** - Type safety
+- **Tailwind CSS v4** - Styling
+- **Vite** - Build tool
+- **Lucide React** - Icon library
+- **LocalStorage** - Data persistence
 
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+ and npm
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone <your-repo-url>
+cd finary-app
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-### 2. Jalankan Development Server
-
+3. Run the development server:
 ```bash
 npm run dev
 ```
 
-Aplikasi akan berjalan di `http://localhost:5173`
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-### 3. Build untuk Production
+## Deployment to Vercel
+
+### Option 1: Deploy via Vercel CLI
+
+1. Install Vercel CLI:
+```bash
+npm install -g vercel
+```
+
+2. Deploy:
+```bash
+vercel
+```
+
+### Option 2: Deploy via Vercel Dashboard
+
+1. Push your code to GitHub
+2. Go to [vercel.com](https://vercel.com)
+3. Click "New Project"
+4. Import your GitHub repository
+5. Vercel will automatically detect the settings
+6. Click "Deploy"
+
+## Build for Production
 
 ```bash
 npm run build
 ```
 
-File production akan ada di folder `dist/`
+The built files will be in the `dist` folder.
 
-### 4. Preview Production Build
-
-```bash
-npm run preview
-```
-
-## 🌐 Deploy ke Website
-
-### Deploy ke Vercel (Recommended)
-
-1. Push code ke GitHub:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/username/finary-app.git
-git push -u origin main
-```
-
-2. Kunjungi [vercel.com](https://vercel.com)
-3. Import repository GitHub Anda
-4. Deploy otomatis! ✨
-
-### Deploy ke Netlify
-
-1. Build project:
-
-```bash
-npm run build
-```
-
-2. Kunjungi [netlify.com](https://netlify.com)
-3. Drag & drop folder `dist/` ke Netlify
-4. Website langsung live! 🎉
-
-### Deploy ke GitHub Pages
-
-1. Install package:
-
-```bash
-npm install --save-dev gh-pages
-```
-
-2. Update `package.json`:
-
-```json
-{
-  "homepage": "https://username.github.io/finary-app",
-  "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
-  }
-}
-```
-
-3. Update `vite.config.ts`:
-
-```ts
-export default defineConfig({
-  plugins: [react()],
-  base: "/finary-app/",
-});
-```
-
-4. Deploy:
-
-```bash
-npm run deploy
-```
-
-## 📂 Struktur Folder
+## Project Structure
 
 ```
 finary-app/
+├── public/              # Static assets
 ├── src/
-│   ├── components/        # Komponen React
-│   │   ├── PieChartComponent.tsx
-│   │   └── BarChartComponent.tsx
-│   ├── constants/         # Konstanta & data statis
+│   ├── components/      # React components
+│   │   ├── Background.tsx
+│   │   ├── LoginPage.tsx
+│   │   └── AccountManager.tsx
+│   ├── constants/       # Constants and translations
 │   │   └── index.ts
-│   ├── types/            # TypeScript types
+│   ├── contexts/        # React contexts
+│   │   └── AuthContext.tsx
+│   ├── hooks/           # Custom React hooks
+│   │   └── useTransactions.ts
+│   ├── types/           # TypeScript type definitions
 │   │   └── index.ts
-│   ├── utils/            # Helper functions
-│   │   └── index.ts
-│   ├── App.tsx           # Main component
-│   ├── main.tsx          # Entry point
-│   └── index.css         # Global styles
-├── public/               # Static assets
+│   ├── utils/           # Utility functions
+│   │   ├── formatters.ts
+│   │   └── transactions.ts
+│   ├── App.tsx          # Main application component
+│   ├── index.tsx        # Application entry point
+│   └── index.css        # Global styles
 ├── index.html           # HTML template
-├── package.json         # Dependencies
-├── vite.config.ts       # Vite config
-└── tsconfig.json        # TypeScript config
+├── package.json         # Dependencies and scripts
+├── tsconfig.json        # TypeScript configuration
+├── vite.config.ts       # Vite configuration
+├── vercel.json          # Vercel deployment configuration
+└── README.md            # This file
 ```
 
-## 🛠️ Teknologi
+## Features Guide
 
-- **React 18** - UI Framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool & dev server
-- **Tailwind CSS v4** - Styling
-- **Lucide React** - Icons
-- **LocalStorage** - Data persistence
+### Creating an Account
 
-## 📝 Cara Menggunakan Aplikasi
+1. Open the app
+2. Click "Register"
+3. Enter your email, password, and name
+4. Click "Register" button
 
-1. **Tambah Transaksi**: Klik tombol (+) melayang
-2. **Lihat Grafik**: Scroll ke bawah dashboard untuk analisis visual
-3. **Buka Laporan**: Tab "Laporan" untuk melihat arsip bulanan
-4. **Ubah Tema**: Tab "Pengaturan" untuk ganti tema & bahasa
-5. **Bantuan**: Tab "Bantuan" untuk panduan lengkap
+### Adding Transactions
 
-## 🎯 Kategori
+1. Click the floating "+" button (mobile) or "Add New" button (desktop)
+2. Select transaction type (Income/Expense)
+3. Choose category
+4. Enter amount and date
+5. Add optional note
+6. Click "Save"
 
-### Pemasukan
+### Switching Accounts
 
-- Gaji & Upah
-- Bonus & Tunjangan
-- Hasil Usaha
-- Investasi & Dividen
-- Utang (Menerima Pinjaman)
-- Pengembalian Piutang
-- Dan lainnya...
+1. Go to Settings
+2. Scroll to "Account Management"
+3. Click on any account to switch
+4. Or click "Logout" to return to login page
 
-### Pengeluaran
+### Viewing Reports
 
-- Makanan & Minuman
-- Transportasi
-- Belanja Bulanan
-- Tagihan & Utilitas
-- Piutang (Memberi Pinjaman)
-- Membayar Utang
-- Dan lainnya...
+1. Click "Reports" in navigation
+2. Select a month from the archive
+3. View detailed ledger with opening balance and transactions
 
-## 👨‍💻 Author
+### Customization
 
-Created by **mhalwiii**
+- Change theme in Settings (Light/Dark)
+- Switch language (Indonesian/English)
+- Customize greeting messages
+- Edit your profile name
 
-## 📄 License
+## Contributing
 
-MIT License - Bebas digunakan untuk project pribadi maupun komersial
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT License
+
+## Author
+
+Created by mhalwiii
 
 ---
 
-💡 **Tips**: Gunakan fitur "Export Data" untuk backup manual, meskipun data sudah tersimpan otomatis di browser!
-
-⭐ Jika project ini membantu, jangan lupa beri star di GitHub!
+For support or questions, please open an issue on GitHub.
